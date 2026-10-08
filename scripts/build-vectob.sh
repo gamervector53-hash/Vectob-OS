@@ -101,14 +101,14 @@ sudo chroot "$ROOT" chown -R vector:vector /home/vector
 sudo sed -i 's/^deb /# deb /' "$ROOT/etc/apt/sources.list" || true
 sudo tee "$ROOT/etc/motd" >/dev/null <<'MOTD'
 Vectob OS 0.1 Alpha
-Ubuntu 12.04 i386 foundation — offline experimental build.
+Ubuntu 12.04 i386 foundation â offline experimental build.
 MOTD
 
 kernel=$(find "$ROOT/lib/modules" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -n1)
 test -n "$kernel"
 echo "Configuring kernel: $kernel"
 if [ ! -f "$ROOT/boot/vmlinuz-$kernel" ]; then
-  xorriso -osirrox on -indev "$ISO" -extract /casper/vmlinuz "$ROOT/boot/vmlinuz-$kernel"
+  sudo xorriso -osirrox on -indev "$ISO" -extract /casper/vmlinuz "$ROOT/boot/vmlinuz-$kernel"
 fi
 sudo chroot "$ROOT" update-initramfs -c -k "$kernel" || sudo chroot "$ROOT" update-initramfs -u -k "$kernel"
 test -s "$ROOT/boot/initrd.img-$kernel"

@@ -20,18 +20,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p output
-          gh release download v0.1-alpha --repo "$GITHUB_REPOSITORY" --pattern 'vectob-0.1-i386.img.zst' --dir output
+          gh release download v0.1.1-alpha --repo "$GITHUB_REPOSITORY" --pattern 'vectob-0.1.1-i386.img.zst' --dir output
 
       - name: Repackage disk into ZIP supported by iPhone Files
         run: |
-          zstd -d -f output/vectob-0.1-i386.img.zst -o output/vectob-0.1-i386.img
+          zstd -d -f output/vectob-0.1.1-i386.img.zst -o output/vectob-0.1.1-i386.img
           cd output
-          zip -1 -q Vectob-OS-0.1-i386.zip vectob-0.1-i386.img
-          unzip -tq Vectob-OS-0.1-i386.zip
-          ls -lh Vectob-OS-0.1-i386.zip
+          zip -1 -q Vectob-OS-0.1.1-i386.zip vectob-0.1.1-i386.img
+          unzip -tq Vectob-OS-0.1.1-i386.zip
+          ls -lh Vectob-OS-0.1.1-i386.zip
 
       - name: Attach ZIP to Vectob release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload v0.1-alpha output/Vectob-OS-0.1-i386.zip --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload v0.1.1-alpha output/Vectob-OS-0.1.1-i386.zip --repo "$GITHUB_REPOSITORY" --clobber

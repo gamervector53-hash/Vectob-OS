@@ -1,25 +1,11 @@
-# Vectob OS 0.1 Alpha 🍐🐧
+# Vectob OS 0.1.1 Alpha (boot fix)
 
-A custom **Ubuntu 12.04.2 i386** desktop image built by GitHub Actions for the original UTM iPhone app. This is a small Ubuntu remix, not a separately maintained distribution.
+Experimental Ubuntu 12.04.2 i386 desktop image for original UTM on iPhone.
 
-### Download for iPhone
-1. Go to **Releases → v0.1-alpha**.
-2. Download **Vectob-OS-0.1-i386.zip** (~650 MB). ZIP is supported by iPhone Files.
-3. Open the ZIP in Files; it expands to **vectob-0.1-i386.img** (8 GB). Make sure your iPhone has ample free space.
-4. In **original UTM**, create **Emulate → Linux → i386 (Intel i440FX)**, with 2048 MB RAM, 1 CPU, VGA, legacy BIOS and an IDE disk. Use the extracted **.img** as the VM's disk.
-5. Boot without the Ubuntu installer ISO. If UTM can't import the IMG as a disk, choose **Existing Image** when adding a drive.
+## Updated boot fix
+The original Vectob 0.1 release reached the BusyBox initramfs emergency shell. The new builder formats ext4 with Ubuntu-3.5-compatible options (no metadata_csum, 64bit, orphan_file), creates legacy BIOS GRUB, boots the resulting raw IMG under QEMU, and **refuses to publish** if Linux and the LightDM service do not start. The QEMU test does not prove desktop pixels render in UTM; the final iPhone boot must be verified there.
 
-### Alpha specification
-* Genuine Ubuntu 12.04.2 desktop filesystem, from an official ISO whose SHA256 is verified during build.
-* Hostname **vectob**, username **vector**; auto login.
-* Password locked, passwordless sudo; **keep the VM offline**.
-* 8 GiB MBR/ext4 disk with GRUB BIOS boot; data persists.
-* Branded macOS-inspired wallpaper and Unity 2D when available. A complete bottom macOS dock is **not** yet included.
-* The GitHub Actions image-building process passed, but **boot on UTM/iPhone is not yet verified**.
+## Download / UTM
+Use [Releases](../../releases/tag/v0.1.1-alpha) and download the iPhone Files ZIP when published. Extract **vectob-0.1.1-i386.img** and replace the disk in original UTM (i386, i440FX, 2 GiB RAM, 1 CPU core, VGA, IDE disk, legacy BIOS). Do not attach the Ubuntu installer ISO. The disk is 8 GiB uncompressed and has persistent ext4 storage.
 
-### Builder source
-* `scripts/build-vectob.sh`: builds `vectob-0.1-i386.img.zst`.
-* `.github/workflows/build-vectob.yml`: builds the OS and publishes initial release.
-* `.github/workflows/repack-iphone.yml`: publishes a ZIP for iPhone Files.
-
-This is an unsupported legacy Ubuntu release for offline experimentation only.
+Login is automatic as **vector**, hostname **vectob**, with passwordless sudo by design. **Keep it offline**: Ubuntu 12.04 is unsupported. Vectob styling currently includes branded wallpaper; a macOS-style dock remains future work.

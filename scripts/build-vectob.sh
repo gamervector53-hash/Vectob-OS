@@ -6,7 +6,7 @@ ISO_URL="https://old-releases.ubuntu.com/releases/12.04.0/ubuntu-12.04.2-desktop
 SUMS_URL="https://old-releases.ubuntu.com/releases/12.04.0/SHA256SUMS"
 ISO="/tmp/vectob-ubuntu.iso"
 SQUASH="/tmp/vectob-filesystem.squashfs"
-IMG="$GITHUB_WORKSPACE/output/vectob-0.1-i386.img"
+IMG="$GITHUB_WORKSPACE/output/vectob-0.1.1-i386.img"
 ROOT="/mnt/vectob-root"
 LOOP=""
 MOUNTED=0
@@ -21,7 +21,7 @@ cleanup() {
 trap cleanup EXIT
 
 sudo apt-get update -qq
-sudo apt-get install -y --no-install-recommends curl xorriso squashfs-tools parted e2fsprogs grub-pc-bin grub2-common qemu-utils zstd
+sudo apt-get install -y --no-install-recommends curl xorriso squashfs-tools parted e2fsprogs grub-pc-bin grub2-common qemu-utils qemu-system-x86 zstd
 mkdir -p output
 echo "Downloading official Ubuntu 12.04.2 32-bit Desktop ISO..."
 curl --fail --location --retry 5 --retry-delay 8 "$ISO_URL" -o "$ISO"
@@ -45,7 +45,14 @@ if [ ! -b "$PART" ]; then
   sleep 2
 fi
 test -b "$PART"
-sudo mkfs.ext4 -F -L VECTOB "$PART"
+# Ubuntu 12.04's 3.5 kernel cannot mount modern ext4 metadata_csum / orphan_file features.
+sudo mkfs.ext4 -F -L VECTOB -O ^64bit,^metadata_csum,^orphan_file "$PART"
+features=$(sudo tune2fs -l "$PART" | sed -n 's/^Filesystem features: *//p')
+echo "Vectob ext4 filesystem features: $features"
+if echo " $features " | grep -Eq ' (64bit|metadata_csum|orphan_file) '; then
+  echo "ERROR: filesystem contains features unsupported by the Ubuntu 12.04 kernel" >&2
+  exit 1
+fi
 sudo mkdir -p "$ROOT"
 sudo mount "$PART" "$ROOT"
 MOUNTED=1
@@ -99,9 +106,31 @@ sudo chroot "$ROOT" chown -R vector:vector /home/vector
 
 # Disable archive updates: this alpha intentionally works offline.
 sudo sed -i 's/^deb /# deb /' "$ROOT/etc/apt/sources.list" || true
+sudo mkdir -p "$ROOT/etc/init"
+sudo tee "$ROOT/etc/init/vectob-smoketest.conf" >/dev/null <<'SMOKE'
+description "Vectob first-boot self test"
+start on runlevel [2345]
+task
+script
+  if [ -c /dev/ttyS0 ]; then
+    echo VECTOB_ROOT_MOUNTED > /dev/ttyS0
+    n=0
+    while [ "$n" -lt 80 ]; do
+      if pidof lightdm >/dev/null 2>&1; then
+        echo VECTOB_LIGHTDM_STARTED > /dev/ttyS0
+        exit 0
+      fi
+      n=$((n + 1))
+      sleep 2
+    done
+    echo VECTOB_LIGHTDM_NOT_STARTED > /dev/ttyS0
+  fi
+end script
+SMOKE
+test -x "$ROOT/usr/sbin/lightdm"
 sudo tee "$ROOT/etc/motd" >/dev/null <<'MOTD'
 Vectob OS 0.1 Alpha
-Ubuntu 12.04 i386 foundation â offline experimental build.
+Ubuntu 12.04 i386 foundation Ã¢ÂÂ offline experimental build.
 MOTD
 
 kernel=$(find "$ROOT/lib/modules" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -n1)
@@ -119,7 +148,7 @@ insmod part_msdos
 insmod ext2
 search --no-floppy --label VECTOB --set=root
 menuentry 'Vectob OS 0.1 Alpha' {
-  linux /boot/vmlinuz-$kernel root=LABEL=VECTOB ro quiet splash
+  linux /boot/vmlinuz-$kernel root=LABEL=VECTOB ro console=tty0 console=ttyS0,115200n8
   initrd /boot/initrd.img-$kernel
 }
 GRUB
@@ -136,6 +165,41 @@ LOOP=""
 echo "Disk image built:"
 file "$IMG"
 qemu-img info "$IMG"
+
+# Verify that the custom image boots into Linux userspace and starts LightDM.
+# This catches exactly the initramfs shell regression seen on the iPhone.
+echo "Smoke-testing i386 BIOS boot in QEMU (software emulation)..."
+BOOTLOG="$GITHUB_WORKSPACE/output/vectob-boot-serial.log"
+VMLOG="$GITHUB_WORKSPACE/output/vectob-qemu.log"
+: > "$BOOTLOG"
+qemu-system-i386 -machine pc -accel tcg -m 1024 -smp 1 \
+  -drive file="$IMG",format=raw,if=ide \
+  -vga std -display none -serial "file:$BOOTLOG" \
+  -monitor none -net none -no-reboot > "$VMLOG" 2>&1 &
+QEMU_PID=$!
+PASSED=0
+for i in $(seq 1 65); do
+  if grep -q VECTOB_LIGHTDM_STARTED "$BOOTLOG"; then
+    PASSED=1
+    break
+  fi
+  if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+    break
+  fi
+  sleep 5
+done
+kill "$QEMU_PID" 2>/dev/null || true
+wait "$QEMU_PID" 2>/dev/null || true
+if [ "$PASSED" -ne 1 ]; then
+  echo "ERROR: Vectob did not reach the LightDM desktop service in the emulator."
+  echo "=== Guest serial log ==="
+  tail -100 "$BOOTLOG" || true
+  echo "=== QEMU log ==="
+  tail -40 "$VMLOG" || true
+  exit 1
+fi
+echo "PASS: boot reached Linux userspace and started LightDM."
+# This headless test checks service startup, not visible desktop rendering in UTM.
 zstd -T0 -7 --rm -f "$IMG" -o "$IMG.zst"
 sha256sum "$IMG.zst" > "$IMG.zst.sha256"
 ls -lh "$IMG.zst" "$IMG.zst.sha256"

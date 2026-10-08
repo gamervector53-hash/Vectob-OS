@@ -1,4 +1,4 @@
-name: Build Vectob OS 0.1
+name: Build Vectob OS 0.1.1
 on:
   workflow_dispatch:
 
@@ -20,8 +20,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.1-alpha >/dev/null 2>&1; then
-            gh release upload v0.1-alpha output/vectob-0.1-i386.img.zst output/vectob-0.1-i386.img.zst.sha256 --clobber
+          if gh release view v0.1.1-alpha >/dev/null 2>&1; then
+            gh release upload v0.1.1-alpha output/vectob-0.1.1-i386.img.zst output/vectob-0.1.1-i386.img.zst.sha256 --clobber
           else
-            gh release create v0.1-alpha output/vectob-0.1-i386.img.zst output/vectob-0.1-i386.img.zst.sha256 --title "Vectob OS 0.1 Alpha (i386 UTM)" --notes "Experimental, unsupported Ubuntu 12.04.2 i386 desktop image. Auto-login user vector, hostname vectob. Keep offline." --prerelease
+            gh release create v0.1.1-alpha output/vectob-0.1.1-i386.img.zst output/vectob-0.1.1-i386.img.zst.sha256 --title "Vectob OS 0.1.1 Alpha (i386 UTM)" --notes "Experimental, unsupported Ubuntu 12.04.2 i386 desktop image. Auto-login user vector, hostname vectob. Keep offline." --prerelease
           fi

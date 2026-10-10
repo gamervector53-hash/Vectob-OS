@@ -1,0 +1,40 @@
+name: Vectob Secure Boot components
+on:
+  workflow_dispatch:
+  push:
+    branches: [vectob-0.2-uefi]
+    paths:
+      - '.github/workflows/secure-boot.yml'
+permissions:
+  contents: read
+jobs:
+  verify-signed-chain:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install Debian signed boot components and signature verifier
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shim-signed grub-efi-amd64-signed linux-image-generic sbsigntool
+      - name: Locate and verify Microsoft-trusted shim and distribution-signed GRUB and kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p secureboot
+          shim=$(find /usr/lib/shim -name 'shimx64.efi.signed*' -type f | head -n1)
+          grub=$(find /usr/lib/grub -name 'grubx64.efi.signed*' -type f | head -n1)
+          kernel=$(find /boot -name 'vmlinuz-*' -type f | head -n1)
+          test -n "$shim" && test -n "$grub" && test -n "$kernel"
+          for file in "$shim" "$grub" "$kernel"; do
+            echo "Signature metadata for $file"
+            sbverify --list "$file"
+          done
+          cp "$shim" secureboot/shimx64.efi
+          cp "$grub" secureboot/grubx64.efi
+          cp "$kernel" secureboot/vmlinuz
+          sha256sum secureboot/* | tee secureboot/SHA256SUMS
+      - name: Publish inspected components (not an ISO)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectob-secureboot-signed-components
+          path: secureboot/
+          retention-days: 7

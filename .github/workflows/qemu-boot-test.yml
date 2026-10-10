@@ -1,0 +1,67 @@
+name: Vectob QEMU Boot Test
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  test-uefi:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Download latest unsigned ISO build artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/vectob-uefi.yml/runs?branch=vectob-0.2-uefi&status=success&per_page=10" --jq '.workflow_runs[0].id')
+          test -n "$run_id" && test "$run_id" != null
+          mkdir -p download
+          gh run download "$run_id" -n vectob-0.2-amd64-unsigned-iso -D download -R "$GITHUB_REPOSITORY"
+          test -s download/Vectob-OS-0.2-amd64.iso
+          du -h download/Vectob-OS-0.2-amd64.iso
+      - name: Install QEMU and OVMF
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf xorriso
+      - name: Inspect ISO structure
+        run: |
+          xorriso -indev download/Vectob-OS-0.2-amd64.iso -report_el_torito plain
+          xorriso -indev download/Vectob-OS-0.2-amd64.iso -find / -maxdepth 3 -type f -print | head -80
+      - name: Test QEMU UEFI boot with serial logging
+        shell: bash
+        run: |
+          set -euo pipefail
+          firmware=/usr/share/OVMF/OVMF_CODE_4M.fd
+          vars=/usr/share/OVMF/OVMF_VARS_4M.fd
+          test -f "$firmware" && test -f "$vars"
+          cp "$vars" vars.fd
+          set +e
+          timeout --signal=TERM --kill-after=5 95s qemu-system-x86_64 \
+            -machine q35 -accel tcg -cpu max -m 2048 -smp 2 \
+            -drive "if=pflash,format=raw,readonly=on,file=$firmware" \
+            -drive "if=pflash,format=raw,file=vars.fd" \
+            -drive "media=cdrom,if=ide,file=download/Vectob-OS-0.2-amd64.iso,readonly=on" \
+            -display none -vga std -serial file:serial.log -monitor none \
+            -no-reboot
+          exit_code=$?
+          set -e
+          echo "QEMU exit status: $exit_code" | tee result.txt
+          echo "Note: timeout does NOT confirm successful guest boot; require guest boot marker for PASS." | tee -a result.txt
+          test -f serial.log && tail -80 serial.log || true
+          if grep -q 'VECTOB_BOOT_OK' serial.log 2>/dev/null; then
+            echo 'PASS: guest boot marker detected' | tee -a result.txt
+          else
+            echo 'INCONCLUSIVE/FAIL: No guest boot marker; inspect firmware and guest video output.' | tee -a result.txt
+            exit 1
+          fi
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectob-uefi-qemu-test-logs
+          path: |
+            serial.log
+            result.txt
+          if-no-files-found: ignore
+          retention-days: 7
